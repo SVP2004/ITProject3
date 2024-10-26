@@ -8,6 +8,7 @@ import random
 port = 8080
 if len(sys.argv) > 1:
     port = int(sys.argv[1])
+    print("Using port " +str(port))
 else:
     print("Using default port 8080")
 hostname = socket.gethostname()
@@ -66,7 +67,42 @@ signal.signal(signal.SIGINT, sigint_handler)
 # Read login credentials for all the users
 # Read secret data of all the users
 
+###USER CREDENTIALS
+#opening passwords.txt
+with open('passwords.txt', 'r') as f:
+    lines = f.readlines()
 
+#creating empty dict
+credentials = {}
+
+#looping through lines in text file
+for line in lines:
+    #split the line on user/pass
+    username, password = line.strip().split()
+    #add to credentials
+    credentials[username] = password
+
+
+
+
+###SECRETS
+#opening passwords.txt
+with open('secrets.txt', 'r') as f:
+    lines = f.readlines()
+
+#creating empty dict
+secrets = {}
+
+#looping through lines in text file
+for line in lines:
+    #split the line on user/pass
+    username, secret = line.strip().split()
+    #add to credentials
+    secrets[username] = secret
+
+
+#Store Session Cookies
+session_cookies = {}
 
 
 ### Loop to accept incoming HTTP connections and respond.
@@ -81,8 +117,75 @@ while True:
     print_value('headers', headers)
     print_value('entity body', body)
 
+
+    #Dynamic Host/Port configuration
+    submit_hostport = "%s:%d" % (hostname, port)
+
+    for line in headers.split('\r\n'):
+        if line.startswith("Host:"):
+            host_header = line.split(": ")[1]
+            host_parts = host_header.split(':')
+
+            dynamic_hostname = host_parts[0]
+            dynamic_port = port if len(host_parts) == 1 else int(host_parts[1])
+
+            submit_hostport = "%s:%d" % (dynamic_hostname, dynamic_port)
+            break
+
+
     # TODO: Put your application logic here!
     # Parse headers and body and perform various actions
+    request_line = headers.split('\r\n')[0]
+    method = request_line.split()[0]
+
+    headers_to_send = ''
+    html_content_to_send = login_page % submit_hostport ##Default Page
+
+    #Cookie Validation
+    cookie = None
+    for line in headers.split('\r\n'):
+        if line.startswith("Cookie:"):
+            cookie = line.split("Cookie: token=")[-1]
+            break
+    
+    if cookie and cookie in session_cookies:
+        #Case C: Valid cookie, serve secret page
+        username = session_cookies[cookie]
+        html_content_to_send = (success_page % submit_hostport) + secrets[username]
+    else:
+        if method == 'POST':
+            params = dict(pair.split('=') for pair in body.split('&'))
+            action = params.get('action')
+            username = params.get('username')
+            password = params.get('password')
+
+            #Case E: Logout, clear cookie
+            if action == 'logout'and cookie in session_cookies:
+                headers_to_send = 'Set-Cookie: token=; expires=Thu, 01 Jan 1970 00:00:00 GMT \r\n'
+                del session_cookies[cookie]
+                html_content_to_send = logout_page % submit_hostport
+            
+            #Case A: Login attempt with user/pass
+            elif username and password:
+                if username in credentials and credentials[username] == password:
+                    #Succesful Login, set new cookie
+                    new_cookie = str(random.getrandbits(64))
+                    session_cookies[new_cookie] = username
+                    headers_to_send = f'Set-Cookie: token={new_cookie}\r\n'
+                    html_content_to_send = (success_page % submit_hostport) + secrets[username]
+                else:
+                    #Case B: Failed Login
+                    html_content_to_send = (bad_creds_page % submit_hostport)
+
+            else:
+                #Case B: Missing or Incorrect Credentials
+                html_content_to_send = (bad_creds_page % submit_hostport)
+
+        else:
+            #CaseD: Invalid or Missing Cookie, Default to Login Page
+            html_content_to_send = login_page % submit_hostport
+        
+
 
     # OPTIONAL TODO:
     # Set up the port/hostname for the form's submit URL.
@@ -95,13 +198,13 @@ while True:
     # By default, as set up below, POSTing the form will
     # always send the request to the domain name returned by
     # socket.gethostname().
-    submit_hostport = "%s:%d" % (hostname, port)
+    
+    
 
     # You need to set the variables:
     # (1) `html_content_to_send` => add the HTML content you'd
     # like to send to the client.
     # Right now, we just send the default login page.
-    html_content_to_send = login_page % submit_hostport
     # But other possibilities exist, including
     # html_content_to_send = (success_page % submit_hostport) + <secret>
     # html_content_to_send = bad_creds_page % submit_hostport
@@ -110,7 +213,6 @@ while True:
     # (2) `headers_to_send` => add any additional headers
     # you'd like to send the client?
     # Right now, we don't send any extra headers.
-    headers_to_send = ''
 
     # Construct and send the final response
     response  = 'HTTP/1.1 200 OK\r\n'
