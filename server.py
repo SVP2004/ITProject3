@@ -148,7 +148,7 @@ while True:
             cookie = line.split("Cookie: token=")[-1]
             break
     
-    if cookie and cookie in session_cookies:
+    if cookie and cookie in session_cookies and method != "POST":
         #Case C: Valid cookie, serve secret page
         username = session_cookies[cookie]
         html_content_to_send = (success_page % submit_hostport) + secrets[username]
@@ -160,10 +160,11 @@ while True:
             password = params.get('password')
 
             #Case E: Logout, clear cookie
-            if action == 'logout'and cookie in session_cookies:
-                headers_to_send = 'Set-Cookie: token=; expires=Thu, 01 Jan 1970 00:00:00 GMT \r\n'
+            if action == 'logout' and cookie in session_cookies:
                 del session_cookies[cookie]
+                headers_to_send = 'Set-Cookie: token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax\r\n'
                 html_content_to_send = logout_page % submit_hostport
+                cookie = None  # Explicitly clear cookie reference
             
             #Case A: Login attempt with user/pass
             elif username and password:
