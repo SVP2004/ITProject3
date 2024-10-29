@@ -12,6 +12,7 @@ if len(sys.argv) > 1:
 else:
     print("Using default port 8080")
 hostname = socket.gethostname()
+server_ip = socket.gethostbyname(hostname)
 
 # Start a listening server socket on the port
 sock = socket.socket()
@@ -119,7 +120,7 @@ while True:
 
 
     #Dynamic Host/Port configuration
-    submit_hostport = "%s:%d" % (hostname, port)
+    submit_hostport = "%s:%d" % (server_ip, port)
 
     for line in headers.split('\r\n'):
         if line.startswith("Host:"):
@@ -136,8 +137,10 @@ while True:
     # TODO: Put your application logic here!
     # Parse headers and body and perform various actions
     request_line = headers.split('\r\n')[0]
-    method = request_line.split()[0]
-
+    if request_line:
+        method = request_line.split()[0]
+    else:
+        method = None
     headers_to_send = ''
     html_content_to_send = login_page % submit_hostport ##Default Page
 
@@ -148,43 +151,94 @@ while True:
             cookie = line.split("Cookie: token=")[-1]
             break
     
-    if cookie and cookie in session_cookies and method != "POST":
-        #Case C: Valid cookie, serve secret page
+    logout = False
+    # Case E: Logout, clear cookie
+    if method == 'POST' and 'action=logout' in body:
+        if cookie in session_cookies:
+            del session_cookies[cookie]
+            headers_to_send = 'Set-Cookie: token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax\r\n'
+            html_content_to_send = logout_page % submit_hostport
+            cookie = None  # Explicitly clear cookie reference
+            logout = True
+        
+# Case C: Valid cookie, serve secret page
+    elif cookie and cookie in session_cookies and method == "GET":
         username = session_cookies[cookie]
         html_content_to_send = (success_page % submit_hostport) + secrets[username]
-    else:
-        if method == 'POST':
-            params = dict(pair.split('=') for pair in body.split('&'))
-            action = params.get('action')
-            username = params.get('username')
-            password = params.get('password')
-
-            #Case E: Logout, clear cookie
-            if action == 'logout' and cookie in session_cookies:
-                del session_cookies[cookie]
-                headers_to_send = 'Set-Cookie: token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax\r\n'
-                html_content_to_send = logout_page % submit_hostport
-                cookie = None  # Explicitly clear cookie reference
-            
-            #Case A: Login attempt with user/pass
-            elif username and password:
-                if username in credentials and credentials[username] == password:
-                    #Succesful Login, set new cookie
-                    new_cookie = str(random.getrandbits(64))
-                    session_cookies[new_cookie] = username
-                    headers_to_send = f'Set-Cookie: token={new_cookie}\r\n'
-                    html_content_to_send = (success_page % submit_hostport) + secrets[username]
-                else:
-                    #Case B: Failed Login
-                    html_content_to_send = (bad_creds_page % submit_hostport)
-
-            else:
-                #Case B: Missing or Incorrect Credentials
-                html_content_to_send = (bad_creds_page % submit_hostport)
-
+    
+    # Case D: Invalid or Missing Cookie, Default to Login Page
+    elif (not cookie or cookie not in session_cookies) and method == "GET":
+        html_content_to_send = login_page % submit_hostport
+        
+        # Case A: Login attempt with user/pass
+    if method == 'POST' and not logout and 'username' in body and 'password' in body:
+        params = dict(pair.split('=') for pair in body.split('&'))
+        username = params.get('username')
+        password = params.get('password')
+        if username and password and username in credentials and credentials[username] == password:
+            # Successful Login, set new cookie
+            new_cookie = str(random.getrandbits(64))
+            session_cookies[new_cookie] = username
+            headers_to_send = f'Set-Cookie: token={new_cookie}\r\n'
+            html_content_to_send = (success_page % submit_hostport) + secrets[username]
         else:
-            #CaseD: Invalid or Missing Cookie, Default to Login Page
-            html_content_to_send = login_page % submit_hostport
+            # Case B: Failed Login
+            html_content_to_send = (bad_creds_page % submit_hostport)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # if cookie and cookie in session_cookies and method != "POST":
+    #     #Case C: Valid cookie, serve secret page
+    #     username = session_cookies[cookie]
+    #     html_content_to_send = (success_page % submit_hostport) + secrets[username]
+    # else:
+    #     if method == 'POST':
+    #         params = dict(pair.split('=') for pair in body.split('&'))
+    #         action = params.get('action')
+    #         username = params.get('username')
+    #         password = params.get('password')
+
+    #         #Case E: Logout, clear cookie
+    #         if action == 'logout' and cookie in session_cookies:
+    #             del session_cookies[cookie]
+    #             headers_to_send = 'Set-Cookie: token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax\r\n'
+    #             html_content_to_send = logout_page % submit_hostport
+    #             cookie = None  # Explicitly clear cookie reference
+            
+    #         #Case A: Login attempt with user/pass
+    #         elif username and password:
+    #             if username in credentials and credentials[username] == password:
+    #                 #Succesful Login, set new cookie
+    #                 new_cookie = str(random.getrandbits(64))
+    #                 session_cookies[new_cookie] = username
+    #                 headers_to_send = f'Set-Cookie: token={new_cookie}\r\n'
+    #                 html_content_to_send = (success_page % submit_hostport) + secrets[username]
+    #             else:
+    #                 #Case B: Failed Login
+    #                 html_content_to_send = (bad_creds_page % submit_hostport)
+
+    #         else:
+    #             #Case B: Missing or Incorrect Credentials
+    #             html_content_to_send = (bad_creds_page % submit_hostport)
+
+    #     else:
+    #         #CaseD: Invalid or Missing Cookie, Default to Login Page
+    #         html_content_to_send = login_page % submit_hostport
         
 
 
