@@ -68,37 +68,24 @@ signal.signal(signal.SIGINT, sigint_handler)
 # Read login credentials for all the users
 # Read secret data of all the users
 
-###USER CREDENTIALS
-#opening passwords.txt
 with open('passwords.txt', 'r') as f:
     lines = f.readlines()
 
-#creating empty dict
 credentials = {}
 
-#looping through lines in text file
 for line in lines:
-    #split the line on user/pass
     username, password = line.strip().split()
-    #add to credentials
     credentials[username] = password
 
 
 
-
-###SECRETS
-#opening passwords.txt
 with open('secrets.txt', 'r') as f:
     lines = f.readlines()
 
-#creating empty dict
 secrets = {}
 
-#looping through lines in text file
 for line in lines:
-    #split the line on user/pass
     username, secret = line.strip().split()
-    #add to credentials
     secrets[username] = secret
 
 
@@ -134,7 +121,6 @@ while True:
             break
 
 
-    # TODO: Put your application logic here!
     # Parse headers and body and perform various actions
     request_line = headers.split('\r\n')[0]
     if request_line:
@@ -144,7 +130,6 @@ while True:
     headers_to_send = ''
     html_content_to_send = login_page % submit_hostport ##Default Page
 
-    #Cookie Validation
     cookie = None
     for line in headers.split('\r\n'):
         if line.startswith("Cookie:"):
@@ -152,93 +137,36 @@ while True:
             break
     
     logout = False
-    # Case E: Logout, clear cookie
+
     if method == 'POST' and 'action=logout' in body:
         if cookie in session_cookies:
             del session_cookies[cookie]
             headers_to_send = 'Set-Cookie: token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax\r\n'
             html_content_to_send = logout_page % submit_hostport
-            cookie = None  # Explicitly clear cookie reference
+            cookie = None  
             logout = True
         
-# Case C: Valid cookie, serve secret page
     elif cookie and cookie in session_cookies and method == "GET":
         username = session_cookies[cookie]
         html_content_to_send = (success_page % submit_hostport) + secrets[username]
     
-    # Case D: Invalid or Missing Cookie, Default to Login Page
     elif (not cookie or cookie not in session_cookies) and method == "GET":
         html_content_to_send = login_page % submit_hostport
         
-        # Case A: Login attempt with user/pass
     if method == 'POST' and not logout and 'username' in body and 'password' in body:
         params = dict(pair.split('=') for pair in body.split('&'))
         username = params.get('username')
         password = params.get('password')
         if username and password and username in credentials and credentials[username] == password:
-            # Successful Login, set new cookie
             new_cookie = str(random.getrandbits(64))
             session_cookies[new_cookie] = username
             headers_to_send = f'Set-Cookie: token={new_cookie}\r\n'
             html_content_to_send = (success_page % submit_hostport) + secrets[username]
         else:
-            # Case B: Failed Login
             html_content_to_send = (bad_creds_page % submit_hostport)
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # if cookie and cookie in session_cookies and method != "POST":
-    #     #Case C: Valid cookie, serve secret page
-    #     username = session_cookies[cookie]
-    #     html_content_to_send = (success_page % submit_hostport) + secrets[username]
-    # else:
-    #     if method == 'POST':
-    #         params = dict(pair.split('=') for pair in body.split('&'))
-    #         action = params.get('action')
-    #         username = params.get('username')
-    #         password = params.get('password')
-
-    #         #Case E: Logout, clear cookie
-    #         if action == 'logout' and cookie in session_cookies:
-    #             del session_cookies[cookie]
-    #             headers_to_send = 'Set-Cookie: token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax\r\n'
-    #             html_content_to_send = logout_page % submit_hostport
-    #             cookie = None  # Explicitly clear cookie reference
-            
-    #         #Case A: Login attempt with user/pass
-    #         elif username and password:
-    #             if username in credentials and credentials[username] == password:
-    #                 #Succesful Login, set new cookie
-    #                 new_cookie = str(random.getrandbits(64))
-    #                 session_cookies[new_cookie] = username
-    #                 headers_to_send = f'Set-Cookie: token={new_cookie}\r\n'
-    #                 html_content_to_send = (success_page % submit_hostport) + secrets[username]
-    #             else:
-    #                 #Case B: Failed Login
-    #                 html_content_to_send = (bad_creds_page % submit_hostport)
-
-    #         else:
-    #             #Case B: Missing or Incorrect Credentials
-    #             html_content_to_send = (bad_creds_page % submit_hostport)
-
-    #     else:
-    #         #CaseD: Invalid or Missing Cookie, Default to Login Page
-    #         html_content_to_send = login_page % submit_hostport
         
 
 
